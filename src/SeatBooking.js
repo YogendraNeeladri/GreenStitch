@@ -14,6 +14,7 @@ const SEAT_PRICES = {
 };
 
 const MAX_SEATS_PER_BOOKING = 8;
+const STORAGE_KEY = 'greenstitch-booked-seats';
 
 const SeatBooking = () => {
     const ROWS = 8;
@@ -36,35 +37,233 @@ const SeatBooking = () => {
         return seats;
     };
 
-    const [seats, setSeats] = useState(initializeSeats());
+    const loadPersistedSeats = () => {
+        const baseSeats = initializeSeats();
+        if (typeof window === 'undefined') return baseSeats;
+
+        try {
+            const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            if (!Array.isArray(persisted) || persisted.length === 0) {
+                return baseSeats;
+            }
+            return baseSeats.map(row =>
+                row.map(seat =>
+                    persisted.includes(seat.id)
+                        ? { ...seat, status: SEAT_STATUS.BOOKED }
+                        : seat
+                )
+            );
+        } catch (error) {
+            console.error('Failed to parse persisted seats', error);
+            return baseSeats;
+        }
+    };
+
+    const [seats, setSeats] = useState(loadPersistedSeats);
+    const [feedback, setFeedback] = useState({ type: '', message: '' });
+
+    const showFeedback = (message, type = 'info') => setFeedback({ message, type });
+    const clearFeedback = () => setFeedback({ message: '', type: '' });
+
+    const persistBookedSeats = (grid) => {
+        if (typeof window === 'undefined') return;
+        const bookedIds = [];
+        grid.forEach(row =>
+            row.forEach(seat => {
+                if (seat.status === SEAT_STATUS.BOOKED) {
+                    bookedIds.push(seat.id);
+                }
+            })
+        );
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(bookedIds));
+    };
 
     // TODO: Implement all required functionality below
 
-    const getSeatPrice = (row) => { return 0; };
-    const getSelectedCount = () => { return 0; };
-    const getBookedCount = () => { return 0; };
-    const getAvailableCount = () => { return 0; };
-    const calculateTotalPrice = () => { return 0; };
+    const getSeatPrice = (row) => {
+        if (row <= 2) return SEAT_PRICES.PREMIUM;
+        if (row <= 5) return SEAT_PRICES.STANDARD;
+        return SEAT_PRICES.ECONOMY;
+    };
+
+    const getSelectedCount = () =>
+        seats.reduce(
+            (total, row) =>
+                total +
+                row.reduce(
+                    (rowTotal, seat) =>
+                        rowTotal + (seat.status === SEAT_STATUS.SELECTED ? 1 : 0),
+                    0
+                ),
+            0
+        );
+
+    const getBookedCount = () =>
+        seats.reduce(
+            (total, row) =>
+                total +
+                row.reduce(
+                    (rowTotal, seat) =>
+                        rowTotal + (seat.status === SEAT_STATUS.BOOKED ? 1 : 0),
+                    0
+                ),
+            0
+        );
+
+    const getAvailableCount = () => ROWS * SEATS_PER_ROW - getSelectedCount() - getBookedCount();
+
+    const calculateTotalPrice = () =>
+        seats.reduce(
+            (total, row, rowIndex) =>
+                total +
+                row.reduce(
+                    (rowTotal, seat) =>
+                        rowTotal +
+                        (seat.status === SEAT_STATUS.SELECTED ? getSeatPrice(rowIndex) : 0),
+                    0
+                ),
+            0
+        );
+
+    const violatesContinuityRule = (rowSeats) => {
+        for (let i = 1; i < rowSeats.length - 1; i++) {
+            const current = rowSeats[i];
+            if (current.status !== SEAT_STATUS.AVAILABLE) continue;
+
+            const left = rowSeats[i - 1];
+            const right = rowSeats[i + 1];
+
+            const leftBlocked = left.status === SEAT_STATUS.SELECTED || left.status === SEAT_STATUS.BOOKED;
+            const rightBlocked = right.status === SEAT_STATUS.SELECTED || right.status === SEAT_STATUS.BOOKED;
+
+            if (leftBlocked && rightBlocked) {
+                return true;
+            }
+        }
+        return false;
+    };
 
     const handleSeatClick = (row, seat) => {
-        // TODO: Implement seat selection logic
+        const seatData = seats[row][seat];
+        if (seatData.status === SEAT_STATUS.BOOKED) {
+            showFeedback('This seat is already booked.', 'error');
+            return;
+        }
+
+        const isSelecting = seatData.status !== SEAT_STATUS.SELECTED;
+        if (isSelecting && getSelectedCount() >= MAX_SEATS_PER_BOOKING) {
+            showFeedback(`You can select up to ${MAX_SEATS_PER_BOOKING} seats per booking.`, 'error');
+            return;
+        }
+
+        const updatedSeats = seats.map((rowSeats, rowIndex) =>
+            rowSeats.map((seatItem, seatIndex) => {
+                if (rowIndex === row && seatIndex === seat) {
+                    return {
+                        ...seatItem,
+                        status: seatItem.status === SEAT_STATUS.SELECTED
+                            ? SEAT_STATUS.AVAILABLE
+                            : SEAT_STATUS.SELECTED
+                    };
+                }
+                return seatItem;
+            })
+        );
+
+        if (violatesContinuityRule(updatedSeats[row])) {
+            showFeedback('Seat selection cannot isolate an available seat between selected or booked seats.', 'error');
+            return;
+        }
+
+        setSeats(updatedSeats);
+        clearFeedback();
     };
 
     const handleBookSeats = () => {
-        // TODO: Implement booking logic
+        const selectedSeats = [];
+        seats.forEach(row =>
+            row.forEach(seat => {
+                if (seat.status === SEAT_STATUS.SELECTED) {
+                    selectedSeats.push(seat);
+                }
+            })
+        );
+
+        if (selectedSeats.length === 0) {
+            showFeedback('Select seats before booking.', 'error');
+            return;
+        }
+
+        if (selectedSeats.length > MAX_SEATS_PER_BOOKING) {
+            showFeedback(`You can book a maximum of ${MAX_SEATS_PER_BOOKING} seats at once.`, 'error');
+            return;
+        }
+
+        const totalPrice = selectedSeats.reduce((sum, seat) => sum + getSeatPrice(seat.row), 0);
+        const seatLabels = selectedSeats
+            .map(seat => `${String.fromCharCode(65 + seat.row)}${seat.seat + 1}`)
+            .join(', ');
+
+        const confirmed = window.confirm(
+            `You're booking ${selectedSeats.length} seat(s): ${seatLabels}\nTotal Price: ₹${totalPrice}\nProceed?`
+        );
+
+        if (!confirmed) {
+            showFeedback('Booking cancelled.', 'info');
+            return;
+        }
+
+        const updatedSeats = seats.map(row =>
+            row.map(seat =>
+                seat.status === SEAT_STATUS.SELECTED
+                    ? { ...seat, status: SEAT_STATUS.BOOKED }
+                    : seat
+            )
+        );
+
+        setSeats(updatedSeats);
+        persistBookedSeats(updatedSeats);
+        showFeedback('Seats booked successfully!', 'success');
     };
 
     const handleClearSelection = () => {
-        // TODO: Implement clear selection logic
+        if (getSelectedCount() === 0) {
+            showFeedback('There are no seats to clear.', 'info');
+            return;
+        }
+
+        const updatedSeats = seats.map(row =>
+            row.map(seat =>
+                seat.status === SEAT_STATUS.SELECTED
+                    ? { ...seat, status: SEAT_STATUS.AVAILABLE }
+                    : seat
+            )
+        );
+        setSeats(updatedSeats);
+        showFeedback('Selection cleared.', 'info');
     };
 
     const handleReset = () => {
-        // TODO: Implement reset logic
+        const confirmed = window.confirm('Reset all seats and clear booking history?');
+        if (!confirmed) return;
+
+        const resetSeats = initializeSeats();
+        setSeats(resetSeats);
+        if (typeof window !== 'undefined') {
+            localStorage.removeItem(STORAGE_KEY);
+        }
+        showFeedback('All seats have been reset.', 'success');
     };
 
     return (
         <div className="seat-booking-container">
             <h1>GreenStitch Seat Booking System</h1>
+
+            {feedback.message && (
+                <div className={`feedback-message ${feedback.type}`}>
+                    {feedback.message}
+                </div>
+            )}
 
             <div className="info-panel">
                 <div className="info-item">

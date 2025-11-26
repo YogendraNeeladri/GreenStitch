@@ -1,0 +1,58 @@
+# -----------------------------------------
+# GIT SETUP & COMPLETE WORKFLOW FOR PROJECT
+# -----------------------------------------
+
+# 1. Initialise Git in the project folder
+git init
+
+# 2. Check current git status
+git status
+
+# 3. Add all project files to staging
+git add .
+
+# 4. First commit – project setup
+git commit -m "Initial project setup"
+
+# -----------------------------------------
+# Continue working on your project…
+# Make commits for each feature you add
+# -----------------------------------------
+
+# 5. After completing first function
+git add .
+git commit -m "Implemented first required function"
+
+# 6. After completing second function
+git add .
+git commit -m "Added second function with validation"
+
+# 7. After completing third function
+git add .
+git commit -m "Completed third required function"
+
+# 8. Fix or improve code
+git add .
+git commit -m "Cleaned code, removed warnings, improved structure"
+
+# 9. Final commit before submission
+git add .
+git commit -m "Final touches and project ready for submission"
+
+# -----------------------------------------
+# VIEWING GIT HISTORY
+# -----------------------------------------
+
+# View commit history
+git log
+
+# View simplified history (optional)
+git log --oneline --graph
+
+# -----------------------------------------
+# BEFORE ZIPPING THE PROJECT
+# -----------------------------------------
+
+# Ensure .git folder exists
+# Do NOT delete it
+# Make sure it is included in the ZIP
