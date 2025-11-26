@@ -1,5 +1,5 @@
 ## GreenStitch Seat Booking
-
+##LiveLink -- https://seatbookavailablity.netlify.app/
 A single-page React application built for the GreenStitch Frontend Assessment. It simulates an airline/theatre style seat booking experience with tier-based pricing, continuity validation, and local persistence of confirmed bookings.
 
 ### Features
@@ -58,4 +58,5 @@ package.json           # Scripts, dependencies, project metadata
 
 ### License
 This project inherits the licensing terms provided with the GreenStitch assessment. Adjust or add a license here as needed.
+
 
